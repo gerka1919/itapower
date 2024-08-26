@@ -22,19 +22,19 @@ function App() {
   const [totalCleaners, setTotalCleaners] = useState(6);
   const [cleaners, setCleaners] = useState(defaultCleaners.slice(0, 6));
   const [currentWeek, setCurrentWeek] = useState(new Date(2024, 7, 26));
-  const [restDays, setRestDays] = useState(cleaners.reduce((acc, c) => ({ ...acc, [c.id]: [] }), {}));
+  const [restDays, setRestDays] = useState(cleaners.reduce((acc, c) => ({ ...acc, [c.id]: -1 }), {}));
   const [schedule, setSchedule] = useState({});
   const [cleanersPerDay, setCleanersPerDay] = useState(daysOfWeek.reduce((acc, day) => ({ ...acc, [day]: 4 }), {}));
   const [copyStatus, setCopyStatus] = useState('');
   const [pairingsHistory, setPairingsHistory] = useState({});
-  const [restDaysCount, setRestDaysCount] = useState(cleaners.reduce((acc, c) => ({ ...acc, [c.id]: 1 }), {}));
+  const [workingDaysCount, setWorkingDaysCount] = useState({});
 
   useEffect(() => {
     const updatedCleaners = defaultCleaners.slice(0, totalCleaners);
     setCleaners(updatedCleaners);
-    setRestDays(updatedCleaners.reduce((acc, c) => ({ ...acc, [c.id]: [] }), {}));
-    setRestDaysCount(updatedCleaners.reduce((acc, c) => ({ ...acc, [c.id]: 1 }), {}));
+    setRestDays(updatedCleaners.reduce((acc, c) => ({ ...acc, [c.id]: -1 }), {}));
 
+    // Aggiorna il numero di signore per giorno per non superare il totale
     setCleanersPerDay(prev => {
       const newCleanersPerDay = { ...prev };
       for (const day of daysOfWeek) {
@@ -50,81 +50,61 @@ function App() {
     setCleaners(prev => prev.map(c => c.id === id ? { ...c, name: newName } : c));
   };
 
-  const generatePairing = useCallback((workingCleaners, day) => {
-    const pairs = [];
-    const usedPairs = new Set(pairingsHistory[day] || []);
-    const totalCleanersPerDay = cleanersPerDay[day];
+  const generatePairing = useCallback((day, dayIndex) => {
+    let workingCleaners = cleaners.filter(c => dayIndex !== restDays[c.id]).map(c => c.id);
+    const totalPairs = [];
+    const usedPairs = new Set();
 
-    while (workingCleaners.length > 1 && pairs.length < totalCleanersPerDay / 2) {
-      let cleaner1 = workingCleaners.pop();
-      let cleaner2 = workingCleaners.find(
-        c2 => !usedPairs.has(`${cleaner1}-${c2}`) && !usedPairs.has(`${c2}-${cleaner1}`)
-      );
+    while (workingCleaners.length >= 2) {
+      const [cleaner1, cleaner2, ...rest] = workingCleaners;
+      const pairKey = `${Math.min(cleaner1, cleaner2)}-${Math.max(cleaner1, cleaner2)}`;
 
-      if (cleaner2) {
-        workingCleaners = workingCleaners.filter(c => c !== cleaner2);
-        pairs.push([cleaner1, cleaner2]);
-        usedPairs.add(`${cleaner1}-${cleaner2}`);
+      if (!usedPairs.has(pairKey)) {
+        totalPairs.push([cleaner1, cleaner2]);
+        usedPairs.add(pairKey);
+        workingCleaners = rest;
       } else {
-        workingCleaners.unshift(cleaner1);
+        workingCleaners.push(cleaner1, cleaner2);
         break;
       }
     }
 
-    if (workingCleaners.length && pairs.length < totalCleanersPerDay / 2) {
-      pairs.push([workingCleaners.pop()]);
+    if (workingCleaners.length === 1) {
+      totalPairs.push([workingCleaners[0]]);
     }
 
-    return pairs;
-  }, [cleanersPerDay, pairingsHistory]);
-
-  const shuffleArray = (array) => {
-    for (let i = array.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [array[i], array[j]] = [array[j], array[i]];
-    }
-    return array;
-  };
+    return totalPairs;
+  }, [cleaners, restDays]);
 
   const generateSchedule = useCallback(() => {
     const newSchedule = {};
-    const newPairingsHistory = {};
+    const workingDaysCount = cleaners.reduce((acc, cleaner) => {
+      acc[cleaner.id] = 0;
+      return acc;
+    }, {});
+
     daysOfWeek.forEach((day, dayIndex) => {
-      let workingCleaners = shuffleArray(
-        cleaners.filter(c => !restDays[c.id].includes(dayIndex)).map(c => c.id)
-      );
+      const pairs = generatePairing(day, dayIndex);
+      newSchedule[day] = [];
 
-      if (workingCleaners.length > cleanersPerDay[day]) {
-        workingCleaners = workingCleaners.slice(0, cleanersPerDay[day]);
-      }
-
-      const pairs = generatePairing(workingCleaners, day);
-      newSchedule[day] = pairs.map(pair => ({
-        cleanerIds: pair,
-        solo: pair.length === 1
-      }));
-
-      newPairingsHistory[day] = pairs.map(pair => pair.join('-'));
+      pairs.forEach(pair => {
+        pair.forEach(cleanerId => {
+          workingDaysCount[cleanerId]++;
+        });
+        if (pair.length === 1) {
+          newSchedule[day].push({ cleanerIds: pair, solo: true });
+        } else {
+          newSchedule[day].push({ cleanerIds: pair, solo: false });
+        }
+      });
     });
 
     setSchedule(newSchedule);
-    setPairingsHistory(newPairingsHistory);
-  }, [generatePairing, cleaners, restDays, cleanersPerDay]);
+    setWorkingDaysCount(workingDaysCount);
+  }, [generatePairing, cleaners]);
 
-  const handleRestDayChange = (id, day, index) => {
-    setRestDays(prev => {
-      const newRestDays = [...(prev[id] || [])];
-      newRestDays[index] = parseInt(day);
-      return { ...prev, [id]: newRestDays };
-    });
-  };
-
-  const handleRestDaysCountChange = (id, count) => {
-    setRestDaysCount(prev => ({ ...prev, [id]: Math.max(1, Math.min(7, parseInt(count) || 1)) }));
-    setRestDays(prev => {
-      const newRestDays = prev[id].slice(0, count);
-      return { ...prev, [id]: newRestDays };
-    });
+  const handleRestDayChange = (id, day) => {
+    setRestDays(prev => ({ ...prev, [id]: parseInt(day) }));
   };
 
   const handleCleanersPerDayChange = (day, value) => {
@@ -154,7 +134,7 @@ function App() {
 
   const getRestingCleaners = (dayIndex) => {
     return cleaners
-      .filter(cleaner => restDays[cleaner.id].includes(dayIndex))
+      .filter(cleaner => restDays[cleaner.id] === dayIndex)
       .map(cleaner => cleaner.name)
       .join(", ");
   };
@@ -225,31 +205,17 @@ function App() {
       <div style={{ marginBottom: '20px', border: '1px solid #ccc', padding: '15px', borderRadius: '5px' }}>
         <h2>Giorni di Riposo</h2>
         {cleaners.map(cleaner => (
-          <div key={cleaner.id} style={{ marginBottom: '15px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-              <div>{cleaner.name}</div>
-              <input
-                type="number"
-                min="1"
-                max="7"
-                value={restDaysCount[cleaner.id]}
-                onChange={(e) => handleRestDaysCountChange(cleaner.id, e.target.value)}
-                style={{ width: '50px', marginLeft: '10px' }}
-              />
-            </div>
-            {[...Array(restDaysCount[cleaner.id])].map((_, idx) => (
-              <select
-                key={idx}
-                value={restDays[cleaner.id][idx] !== undefined ? restDays[cleaner.id][idx] : ""}
-                onChange={(e) => handleRestDayChange(cleaner.id, e.target.value, idx)}
-                style={{ width: '100%', marginBottom: '5px' }}
-              >
-                <option value="" disabled>Seleziona giorno di riposo</option>
-                {daysOfWeek.map((day, index) => (
-                  <option key={index} value={index.toString()}>{day}</option>
-                ))}
-              </select>
-            ))}
+          <div key={cleaner.id} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <div>{cleaner.name}</div>
+            <select
+              value={restDays[cleaner.id].toString()}
+              onChange={(e) => handleRestDayChange(cleaner.id, e.target.value)}
+            >
+              <option value="-1">Nessun giorno di riposo</option>
+              {daysOfWeek.map((day, index) => (
+                <option key={index} value={index.toString()}>{day}</option>
+              ))}
+            </select>
           </div>
         ))}
       </div>

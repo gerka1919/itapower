@@ -21,120 +21,89 @@ const months = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'L
 function App() {
   const [totalCleaners, setTotalCleaners] = useState(6);
   const [cleaners, setCleaners] = useState(defaultCleaners.slice(0, 6));
-  const [currentWeek, setCurrentWeek] = useState(new Date(2024, 7, 26));
-  const [restDays, setRestDays] = useState(cleaners.reduce((acc, c) => ({ ...acc, [c.id]: [] }), {}));
+  const [currentWeek, setCurrentWeek] = useState(new Date(2024, 7, 26)); 
+  const [availableCleaners, setAvailableCleaners] = useState(cleaners.map(c => c.id));
+  const [restDays, setRestDays] = useState(cleaners.reduce((acc, c) => ({ ...acc, [c.id]: -1 }), {}));
   const [schedule, setSchedule] = useState({});
   const [cleanersPerDay, setCleanersPerDay] = useState(daysOfWeek.reduce((acc, day) => ({ ...acc, [day]: 4 }), {}));
   const [copyStatus, setCopyStatus] = useState('');
   const [pairingsHistory, setPairingsHistory] = useState({});
-  const [restDaysCount, setRestDaysCount] = useState(cleaners.reduce((acc, c) => ({ ...acc, [c.id]: 1 }), {}));
 
   useEffect(() => {
     const updatedCleaners = defaultCleaners.slice(0, totalCleaners);
     setCleaners(updatedCleaners);
-    setRestDays(updatedCleaners.reduce((acc, c) => ({ ...acc, [c.id]: [] }), {}));
-    setRestDaysCount(updatedCleaners.reduce((acc, c) => ({ ...acc, [c.id]: 1 }), {}));
-
-    setCleanersPerDay(prev => {
-      const newCleanersPerDay = { ...prev };
-      for (const day of daysOfWeek) {
-        if (newCleanersPerDay[day] > updatedCleaners.length) {
-          newCleanersPerDay[day] = updatedCleaners.length;
-        }
-      }
-      return newCleanersPerDay;
-    });
+    setAvailableCleaners(updatedCleaners.map(c => c.id));
+    setRestDays(updatedCleaners.reduce((acc, c) => ({ ...acc, [c.id]: -1 }), {}));
   }, [totalCleaners]);
 
   const handleCleanerNameChange = (id, newName) => {
     setCleaners(prev => prev.map(c => c.id === id ? { ...c, name: newName } : c));
   };
 
-  const generatePairing = useCallback((workingCleaners, day) => {
-    const pairs = [];
-    const usedPairs = new Set(pairingsHistory[day] || []);
-    const totalCleanersPerDay = cleanersPerDay[day];
+  const generatePairing = useCallback((day, dayIndex) => {
+    let pairs = [];
+    let workingCleaners = availableCleaners.filter(id => dayIndex !== restDays[id]);
+    const pairings = pairingsHistory[day] || [];
 
-    while (workingCleaners.length > 1 && pairs.length < totalCleanersPerDay / 2) {
-      let cleaner1 = workingCleaners.pop();
-      let cleaner2 = workingCleaners.find(
-        c2 => !usedPairs.has(`${cleaner1}-${c2}`) && !usedPairs.has(`${c2}-${cleaner1}`)
-      );
+    workingCleaners = workingCleaners.sort(() => Math.random() - 0.5);
 
-      if (cleaner2) {
-        workingCleaners = workingCleaners.filter(c => c !== cleaner2);
-        pairs.push([cleaner1, cleaner2]);
-        usedPairs.add(`${cleaner1}-${cleaner2}`);
-      } else {
-        workingCleaners.unshift(cleaner1);
-        break;
+    for (let i = 0; i < workingCleaners.length - 1; i++) {
+      const currentCleaner = workingCleaners[i];
+      for (let j = i + 1; j < workingCleaners.length; j++) {
+        const partnerCleaner = workingCleaners[j];
+        const pair = [currentCleaner, partnerCleaner].sort().join('-');
+
+        if (!pairings.includes(pair)) {
+          pairs.push(pair);
+          pairings.push(pair);
+          break;
+        }
+      }
+      if (pairs.length === i) {
+        pairs.push([currentCleaner, workingCleaners[i + 1]].sort().join('-'));
+        pairings.push([currentCleaner, workingCleaners[i + 1]].sort().join('-'));
       }
     }
 
-    if (workingCleaners.length && pairs.length < totalCleanersPerDay / 2) {
-      pairs.push([workingCleaners.pop()]);
-    }
+    setPairingsHistory(prev => ({ ...prev, [day]: pairings }));
 
-    return pairs;
-  }, [cleanersPerDay, pairingsHistory]);
-
-  const shuffleArray = (array) => {
-    for (let i = array.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [array[i], array[j]] = [array[j], array[i]];
-    }
-    return array;
-  };
+    return pairs.map(pair => pair.split('-').map(id => parseInt(id, 10)));
+  }, [availableCleaners, restDays, pairingsHistory]);
 
   const generateSchedule = useCallback(() => {
     const newSchedule = {};
-    const newPairingsHistory = {};
     daysOfWeek.forEach((day, dayIndex) => {
-      let workingCleaners = shuffleArray(
-        cleaners.filter(c => !restDays[c.id].includes(dayIndex)).map(c => c.id)
-      );
+      const pairs = generatePairing(day, dayIndex);
+      const finalPairs = [];
 
-      if (workingCleaners.length > cleanersPerDay[day]) {
-        workingCleaners = workingCleaners.slice(0, cleanersPerDay[day]);
-      }
+      pairs.forEach(pair => {
+        if (finalPairs.length < cleanersPerDay[day]) {
+          finalPairs.push(...pair);
+        }
+      });
 
-      const pairs = generatePairing(workingCleaners, day);
-      newSchedule[day] = pairs.map(pair => ({
-        cleanerIds: pair,
-        solo: pair.length === 1
-      }));
-
-      newPairingsHistory[day] = pairs.map(pair => pair.join('-'));
+      newSchedule[day] = finalPairs;
     });
-
     setSchedule(newSchedule);
-    setPairingsHistory(newPairingsHistory);
-  }, [generatePairing, cleaners, restDays, cleanersPerDay]);
+  }, [generatePairing, cleanersPerDay]);
 
-  const handleRestDayChange = (id, day, index) => {
-    setRestDays(prev => {
-      const newRestDays = [...(prev[id] || [])];
-      newRestDays[index] = parseInt(day);
-      return { ...prev, [id]: newRestDays };
-    });
+  const handleCleanerToggle = (id) => {
+    setAvailableCleaners(prev => 
+      prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]
+    );
   };
 
-  const handleRestDaysCountChange = (id, count) => {
-    setRestDaysCount(prev => ({ ...prev, [id]: Math.max(1, Math.min(7, parseInt(count) || 1)) }));
-    setRestDays(prev => {
-      const newRestDays = prev[id].slice(0, count);
-      return { ...prev, [id]: newRestDays };
-    });
+  const handleRestDayChange = (id, day) => {
+    setRestDays(prev => ({ ...prev, [id]: parseInt(day) }));
   };
 
   const handleCleanersPerDayChange = (day, value) => {
-    const newValue = Math.min(Math.max(1, parseInt(value) || 0), totalCleaners);
-    setCleanersPerDay(prev => ({ ...prev, [day]: newValue }));
+    setCleanersPerDay(prev => ({ ...prev, [day]: Math.max(1, parseInt(value) || 0) }));
   };
 
   const handleDateSelect = (date) => {
     const startOfWeek = new Date(date);
-    const dayOfWeek = startOfWeek.getDay() === 0 ? 6 : startOfWeek.getDay() - 1;
+    const dayOfWeek = startOfWeek.getDay() === 0 ? 6 : startOfWeek.getDay() - 1; 
     startOfWeek.setDate(startOfWeek.getDate() - dayOfWeek);
     setCurrentWeek(startOfWeek);
   };
@@ -154,7 +123,7 @@ function App() {
 
   const getRestingCleaners = (dayIndex) => {
     return cleaners
-      .filter(cleaner => restDays[cleaner.id].includes(dayIndex))
+      .filter(cleaner => restDays[cleaner.id] === dayIndex)
       .map(cleaner => cleaner.name)
       .join(", ");
   };
@@ -162,17 +131,12 @@ function App() {
   const formatTextSchedule = () => {
     const dateRange = `dal ${formatDate(currentWeek)} al ${formatDate(getWeekEndDate(currentWeek))}`;
     let scheduleText = `Turni della Settimana (${dateRange})\n\n`;
-
+    
     daysOfWeek.forEach((day, dayIndex) => {
       scheduleText += `${day}:\n`;
-      scheduleText += `Turni: ${schedule[day]?.map((shift) => {
-        const names = shift.cleanerIds.map(id => {
-          const cleaner = cleaners.find(c => c.id === id);
-          return cleaner ? cleaner.name : '';
-        }).join(' e ');
-
-        return shift.solo ? `${names}*` : names;
-      }).join(', ') || 'Nessun turno assegnato'}\n`;
+      scheduleText += `Turni: ${schedule[day]?.map(cleanerId => 
+        cleaners.find(c => c.id === cleanerId)?.name
+      ).join(', ') || 'Nessun turno assegnato'}\n`;
       scheduleText += `Riposo: ${getRestingCleaners(dayIndex) || 'Nessuno'}\n\n`;
     });
 
@@ -223,51 +187,29 @@ function App() {
       </div>
 
       <div style={{ marginBottom: '20px', border: '1px solid #ccc', padding: '15px', borderRadius: '5px' }}>
-        <h2>Giorni di Riposo</h2>
+        <h2>Disponibilità e Giorni di Riposo</h2>
         {cleaners.map(cleaner => (
-          <div key={cleaner.id} style={{ marginBottom: '15px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-              <div>{cleaner.name}</div>
+          <div key={cleaner.id} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <div>
               <input
-                type="number"
-                min="1"
-                max="7"
-                value={restDaysCount[cleaner.id]}
-                onChange={(e) => handleRestDaysCountChange(cleaner.id, e.target.value)}
-                style={{ width: '50px', marginLeft: '10px' }}
+                type="checkbox"
+                id={`cleaner-${cleaner.id}`}
+                checked={availableCleaners.includes(cleaner.id)}
+                onChange={() => handleCleanerToggle(cleaner.id)}
               />
+              <label htmlFor={`cleaner-${cleaner.id}`} style={{ marginLeft: '5px' }}>
+                {cleaner.name}
+              </label>
             </div>
-            {[...Array(restDaysCount[cleaner.id])].map((_, idx) => (
-              <select
-                key={idx}
-                value={restDays[cleaner.id][idx] !== undefined ? restDays[cleaner.id][idx] : ""}
-                onChange={(e) => handleRestDayChange(cleaner.id, e.target.value, idx)}
-                style={{ width: '100%', marginBottom: '5px' }}
-              >
-                <option value="" disabled>Seleziona giorno di riposo</option>
-                {daysOfWeek.map((day, index) => (
-                  <option key={index} value={index.toString()}>{day}</option>
-                ))}
-              </select>
-            ))}
-          </div>
-        ))}
-      </div>
-
-      <div style={{ marginBottom: '20px', border: '1px solid #ccc', padding: '15px', borderRadius: '5px' }}>
-        <h2>Numero di Signore per Giorno</h2>
-        {daysOfWeek.map(day => (
-          <div key={day} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-            <label htmlFor={`cleaners-${day}`}>{day}:</label>
-            <input
-              id={`cleaners-${day}`}
-              type="number"
-              min="1"
-              max={totalCleaners}
-              value={cleanersPerDay[day]}
-              onChange={(e) => handleCleanersPerDayChange(day, e.target.value)}
-              style={{ width: '50px' }}
-            />
+            <select
+              value={restDays[cleaner.id].toString()}
+              onChange={(e) => handleRestDayChange(cleaner.id, e.target.value)}
+            >
+              <option value="-1">Nessun giorno di riposo</option>
+              {daysOfWeek.map((day, index) => (
+                <option key={index} value={index.toString()}>{day}</option>
+              ))}
+            </select>
           </div>
         ))}
       </div>
@@ -279,11 +221,11 @@ function App() {
           onClickDay={handleDateSelect}
           locale="it-IT"
           showNeighboringMonth={true}
-          tileClassName={({ date }) => {
+          tileClassName={({ date, view }) => {
             const startOfWeek = new Date(currentWeek);
             const endOfWeek = getWeekEndDate(currentWeek);
             if (date >= startOfWeek && date <= endOfWeek) {
-              return 'highlight-week';
+              return 'highlight';
             }
             return null;
           }}
@@ -311,12 +253,30 @@ function App() {
               <tr key={day}>
                 <td style={{ border: '1px solid #ddd', padding: '8px' }}>{day}</td>
                 <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-                  {schedule[day]?.map((shift, index) => (
-                    <div key={index}>
-                      {shift.cleanerIds.map(id => cleaners.find(c => c.id === id)?.name).join(' e ')}
-                      {shift.solo && '*'}
-                    </div>
-                  ))}
+                  {schedule[day]?.map((cleanerId, index, array) => {
+                    const cleaner = cleaners.find(c => c.id === cleanerId);
+                    if (!cleaner) return null;
+
+                    if (index % 2 === 0) {
+                      const nextCleanerId = array[index + 1];
+                      const nextCleaner = nextCleanerId ? cleaners.find(c => c.id === nextCleanerId) : null;
+
+                      if (nextCleaner) {
+                        return (
+                          <div key={index}>
+                            {cleaner.name} e {nextCleaner.name}
+                          </div>
+                        );
+                      } else {
+                        return (
+                          <div key={index} style={{ color: 'red' }}>
+                            {cleaner.name}*
+                          </div>
+                        );
+                      }
+                    }
+                    return null;
+                  })}
                 </td>
                 <td style={{ border: '1px solid #ddd', padding: '8px' }}>{getRestingCleaners(dayIndex)}</td>
               </tr>
@@ -326,19 +286,6 @@ function App() {
         <div style={{ marginTop: '10px', fontSize: '0.9em', fontStyle: 'italic', color: 'red' }}>
           * Indica una signora che lavora da sola in questo turno.
         </div>
-      </div>
-
-      <div style={{ border: '1px solid #ccc', padding: '15px', borderRadius: '5px' }}>
-        <h2>Riepilogo Giorni Lavorati</h2>
-        <ul>
-          {cleaners.map(cleaner => (
-            <li key={cleaner.id}>
-              {cleaner.name}: {Object.values(schedule).reduce((acc, shifts) => {
-                return acc + shifts.filter(shift => shift.cleanerIds.includes(cleaner.id)).length;
-              }, 0)} giorni lavorati
-            </li>
-          ))}
-        </ul>
       </div>
 
       <div style={{ border: '1px solid #ccc', padding: '15px', borderRadius: '5px' }}>

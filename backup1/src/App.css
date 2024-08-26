@@ -1,0 +1,150 @@
+.App {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: Arial, sans-serif;
+  text-align: center;
+}
+
+/* Stili per la sezione di navigazione della settimana */
+.week-navigation {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+/* Stili per i bottoni */
+button {
+  padding: 8px 16px;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+button:hover {
+  background-color: #45a049;
+}
+
+/* Stili per le sezioni di disponibilità e numero di signore per giorno */
+.availability-section,
+.cleaners-per-day-section {
+  margin-bottom: 20px;
+}
+
+.cleaner-row,
+.day-input {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+input[type="checkbox"],
+input[type="number"],
+select {
+  margin-left: 10px;
+}
+
+/* Stili per la tabella dei turni */
+.schedule-section {
+  margin-top: 20px;
+}
+
+.table-container {
+  overflow-x: auto;
+}
+
+.schedule-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+.schedule-table th,
+.schedule-table td {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: left;
+}
+
+.schedule-table th {
+  background-color: #f2f2f2;
+  font-weight: bold;
+}
+
+.cleaner-pair,
+.cleaner-single {
+  margin: 5px 0;
+}
+
+.text-red {
+  color: red;
+}
+
+.note {
+  margin-top: 10px;
+  font-style: italic;
+  color: #666;
+}
+
+/* Stili per la sezione di testo dei turni */
+.text-schedule-section {
+  margin-top: 20px;
+}
+
+.schedule-text {
+  white-space: pre-wrap;
+  text-align: left;
+  background-color: #f9f9f9;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.copy-status {
+  margin-left: 10px;
+  color: green;
+}
+
+/* Stili generali */
+h1, h2, h3 {
+  color: #333;
+}
+
+/* Manteniamo alcuni stili di base di Create React App */
+.App-logo {
+  height: 40vmin;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .App-logo {
+    animation: App-logo-spin infinite 20s linear;
+  }
+}
+
+.App-header {
+  background-color: #282c34;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+  color: white;
+}
+
+.App-link {
+  color: #61dafb;
+}
+
+@keyframes App-logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
